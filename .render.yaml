@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: spotify-playlist-api
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port 10000"
+    envVars:
+      - key: SPOTIPY_CLIENT_ID
+        value: your_client_id
+      - key: SPOTIPY_CLIENT_SECRET
+        value: your_client_secret
+      - key: SPOTIPY_REDIRECT_URI
+        value: https://your-service-url/callback
