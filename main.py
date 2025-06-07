@@ -28,12 +28,28 @@ def create_spotify_client():
         cache_path=".cache-spotify"
     ))
 
-@app.post("/create-playlist")
-def create_playlist(request: PlaylistRequest):
+def get_existing_playlist_id(sp, playlist_name: str) -> str | None:
+    """Check user's existing playlists for a match"""
+    offset = 0
+    limit = 50
+    while True:
+        playlists = sp.current_user_playlists(limit=limit, offset=offset)
+        for playlist in playlists["items"]:
+            if playlist["name"].lower() == playlist_name.lower():
+                return playlist["id"]
+        if playlists["next"]:
+            offset += limit
+        else:
+            break
+    return None
+
+@app.post("/create-or-update-playlist")
+def create_or_update_playlist(request: PlaylistRequest):
     try:
         sp = create_spotify_client()
         user_id = sp.current_user()["id"]
 
+        # Search for all songs
         track_uris = []
         for song in request.songs:
             result = sp.search(q=song, type='track', limit=1)
@@ -44,11 +60,22 @@ def create_playlist(request: PlaylistRequest):
         if not track_uris:
             raise HTTPException(status_code=404, detail="No valid tracks found")
 
-        playlist = sp.user_playlist_create(user=user_id, name=request.playlist_name, public=True)
-        sp.playlist_add_items(playlist['id'], track_uris)
+        # Check if playlist exists
+        playlist_id = get_existing_playlist_id(sp, request.playlist_name)
+
+        if playlist_id:
+            # Add songs to existing playlist
+            sp.playlist_add_items(playlist_id, track_uris)
+            playlist = sp.playlist(playlist_id)
+            message = "Tracks added to existing playlist"
+        else:
+            # Create new playlist and add songs
+            playlist = sp.user_playlist_create(user=user_id, name=request.playlist_name, public=True)
+            sp.playlist_add_items(playlist['id'], track_uris)
+            message = "New playlist created successfully"
 
         return {
-            "message": "Playlist created successfully",
+            "message": message,
             "playlist_url": playlist['external_urls']['spotify']
         }
     except Exception as e:
